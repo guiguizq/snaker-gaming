@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a1118">
+<title>Snake Neon — Jogo da Cobrinha</title>
+<style>
+:root{color-scheme:dark;--bg:#0a1118;--panel:#14222d;--line:#29404a;--text:#e8fff5;--muted:#a3b9bc;--green:#65f5a0;--pink:#ff6b8b}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% 0%,#19352e 0%,var(--bg) 65%);font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:var(--text);display:flex;align-items:center;justify-content:center;padding:22px 12px}.app{width:min(100%,620px);text-align:center}header h1{font-size:clamp(2rem,6vw,3.2rem);margin:0;letter-spacing:.09em}header h1 span{color:var(--green)}header p{color:var(--muted);margin:4px 0 18px}.scores{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}.score{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px}.score small{display:block;color:var(--muted);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase}.score strong{font-size:1.9rem;color:var(--green)}.board{position:relative;width:min(100%,500px);margin:auto;border:2px solid #35534a;border-radius:18px;overflow:hidden;box-shadow:0 18px 65px #0008,0 0 25px #65f5a011;background:#0e1b23;aspect-ratio:1}canvas{width:100%;height:100%;display:block;touch-action:none}.overlay{position:absolute;inset:0;background:#07131bdc;display:flex;align-items:center;justify-content:center;padding:22px;transition:opacity .18s}.overlay.hidden{opacity:0;pointer-events:none}.overlay-card{max-width:340px}.overlay h2{font-size:2rem;margin:0 0 8px;color:var(--green)}.overlay p{color:#c5d6d4;line-height:1.5}.controls{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:17px}button{font:inherit;cursor:pointer;touch-action:manipulation;border:1px solid #436056;border-radius:12px;background:#1b3037;color:var(--text);padding:12px 18px;font-weight:700;transition:background .15s,transform .15s}button:hover:not(:disabled){background:#294a49;transform:translateY(-1px)}button:focus-visible{outline:3px solid #c4ffde;outline-offset:3px}button:disabled{opacity:.45;cursor:not-allowed}.primary{background:var(--green);color:#092119;border-color:var(--green)}.primary:hover:not(:disabled){background:#a0ffc2}.help{color:var(--muted);font-size:.92rem;line-height:1.6;margin:16px auto}.dpad{display:grid;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(2,54px);gap:7px;justify-content:center;margin:12px auto 0;user-select:none}.dpad button{padding:0;font-size:1.35rem}.up{grid-column:2}.left{grid-column:1;grid-row:2}.down{grid-column:2;grid-row:2}.right{grid-column:3;grid-row:2}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}@media(min-width:800px) and (pointer:fine){.dpad{display:none}}@media(max-width:420px){body{padding:12px 8px}.score{padding:8px}.controls button{padding:11px 12px}.help{font-size:.82rem}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important}}
+</style>
+</head>
+<body>
+<main class="app">
+<header><h1>🐍 SNAKE <span>NEON</span></h1><p>Um clássico com energia renovada</p></header>
+<section class="scores" aria-label="Pontuações"><div class="score"><small>Pontuação</small><strong id="score">0</strong></div><div class="score"><small>Recorde</small><strong id="best">0</strong></div></section>
+<section class="board" aria-label="Tabuleiro do jogo da cobrinha"><canvas id="game" width="600" height="600" aria-label="Jogo da cobrinha: use as setas, WASD ou botões direcionais"></canvas><div class="overlay" id="overlay"><div class="overlay-card"><h2 id="overlay-title">Pronto para jogar?</h2><p id="overlay-message">Coma as frutas, cresça e evite as paredes e seu próprio corpo.</p><button class="primary" id="overlay-button">Começar jogo</button></div></div></section>
+<div class="controls"><button class="primary" id="start">▶ Iniciar</button><button id="pause" disabled>⏸ Pausar</button><button id="restart">↻ Reiniciar</button></div>
+<div class="dpad" aria-label="Controles de direção"><button class="up" data-dir="up" aria-label="Cima">↑</button><button class="left" data-dir="left" aria-label="Esquerda">←</button><button class="down" data-dir="down" aria-label="Baixo">↓</button><button class="right" data-dir="right" aria-label="Direita">→</button></div>
+<p class="help">Use <b>↑ ↓ ← →</b> ou <b>W A S D</b> para mover · <b>Espaço</b> para pausar · Deslize o dedo no tabuleiro no celular.</p><div class="sr-only" id="announcement" aria-live="polite"></div>
+</main>
+<script>
+(()=>{'use strict';
+const SIZE=20,CELLS=30,canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const scoreEl=document.getElementById('score'),bestEl=document.getElementById('best'),overlay=document.getElementById('overlay'),overlayTitle=document.getElementById('overlay-title'),overlayMessage=document.getElementById('overlay-message'),overlayButton=document.getElementById('overlay-button'),startBtn=document.getElementById('start'),pauseBtn=document.getElementById('pause'),restartBtn=document.getElementById('restart'),announcement=document.getElementById('announcement');
+const vectors={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+let snake,previousSnake,food,direction,nextDirection,turnQueued,score=0,best=0,state='ready',frame=null,lastFrame=0,elapsed=0;
+try{best=Math.max(0,Number(localStorage.getItem('snake-neon-best'))||0)}catch(e){}bestEl.textContent=best;
+function saveBest(){try{localStorage.setItem('snake-neon-best',String(best))}catch(e){}}
+function resetData(){snake=[{x:8,y:15},{x:7,y:15},{x:6,y:15}];direction=vectors.right;nextDirection=direction;turnQueued=false;score=0;scoreEl.textContent='0';food=spawnFood();previousSnake=snake.map(p=>({...p}));draw(1)}
+function spawnFood(){const occupied=new Set(snake.map(p=>p.y*CELLS+p.x));const free=[];for(let i=0;i<CELLS*CELLS;i++)if(!occupied.has(i))free.push(i);if(!free.length)return null;const i=free[Math.floor(Math.random()*free.length)];return{x:i%CELLS,y:Math.floor(i/CELLS)}}
+function speed(){return Math.max(68,175-Math.floor(score/30)*9)}
+function stopTimer(){if(frame!==null){cancelAnimationFrame(frame);frame=null}lastFrame=0;elapsed=0}
+function schedule(){if(frame===null&&state==='playing'){lastFrame=0;frame=requestAnimationFrame(loop)}}
+function loop(timestamp){frame=null;if(state!=='playing')return;if(!lastFrame)lastFrame=timestamp;elapsed+=Math.min(timestamp-lastFrame,100);lastFrame=timestamp;
+let steps=0;while(state==='playing'&&elapsed>=speed()&&steps<3){elapsed-=speed();tick();steps++}
+if(state==='playing'){draw(Math.min(1,elapsed/speed()));frame=requestAnimationFrame(loop)}}
+function setOverlay(title,message,label){overlayTitle.textContent=title;overlayMessage.textContent=message;overlayButton.textContent=label;overlay.classList.remove('hidden')}
+function syncButtons(){pauseBtn.disabled=state==='ready'||state==='over'||state==='won';pauseBtn.textContent=state==='paused'?'▶ Continuar':'⏸ Pausar';startBtn.disabled=state==='playing'||state==='paused'}
+function start(){stopTimer();resetData();state='playing';overlay.classList.add('hidden');syncButtons();schedule()}
+function finish(won=false){stopTimer();state=won?'won':'over';syncButtons();setOverlay(won?'🏆 Você venceu!':'Fim de jogo!',`Pontuação final: ${score}. ${won?'Você preencheu todo o tabuleiro!':'Tente superar seu recorde!'}`,'Jogar novamente');announcement.textContent=won?'Você venceu!':'Fim de jogo!'}
+function pauseToggle(){if(state==='playing'){stopTimer();state='paused';setOverlay('Jogo pausado','Respire e volte quando quiser.','Continuar')}else if(state==='paused'){state='playing';overlay.classList.add('hidden');schedule()}syncButtons()}
+function setDirection(name){const proposed=vectors[name];if(!proposed||state!=='playing'||turnQueued)return;if(proposed.x===-direction.x&&proposed.y===-direction.y)return;if(proposed===direction)return;nextDirection=proposed;turnQueued=true}
+function tick(){if(state!=='playing')return;previousSnake=snake.map(p=>({...p}));direction=nextDirection;turnQueued=false;const head={x:snake[0].x+direction.x,y:snake[0].y+direction.y};const eating=food&&head.x===food.x&&head.y===food.y;
+if(head.x<0||head.x>=CELLS||head.y<0||head.y>=CELLS){finish();return}
+// Ao não comer, a posição atual da cauda fica livre neste mesmo passo.
+const body=eating?snake:snake.slice(0,-1);if(body.some(p=>p.x===head.x&&p.y===head.y)){finish();return}
+snake.unshift(head);if(eating){score+=10;scoreEl.textContent=score;if(score>best){best=score;bestEl.textContent=best;saveBest()}announcement.textContent=`${score} pontos`;food=spawnFood();if(!food){draw(1);finish(true);return}}else snake.pop()}
+function rounded(x,y,w,h,r){r=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();ctx.fill()}
+function draw(alpha=1){ctx.clearRect(0,0,600,600);ctx.fillStyle='#0d1b23';ctx.fillRect(0,0,600,600);ctx.strokeStyle='#ffffff08';ctx.lineWidth=1;for(let i=1;i<CELLS;i++){let p=i*SIZE+.5;ctx.beginPath();ctx.moveTo(p,0);ctx.lineTo(p,600);ctx.moveTo(0,p);ctx.lineTo(600,p);ctx.stroke()}
+if(food){const cx=food.x*SIZE+10,cy=food.y*SIZE+10;ctx.shadowColor='#ff6b8b';ctx.shadowBlur=18;ctx.fillStyle='#ff668a';ctx.beginPath();ctx.arc(cx,cy,7.5,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='#ffb4c6';ctx.beginPath();ctx.arc(cx-2,cy-2,2,0,Math.PI*2);ctx.fill()}
+snake.forEach((p,i)=>{const old=previousSnake?.[i]||previousSnake?.[previousSnake.length-1]||p;const px=(old.x+(p.x-old.x)*alpha)*SIZE,py=(old.y+(p.y-old.y)*alpha)*SIZE;ctx.fillStyle=i===0?'#b2ffd0':i%2?'#50d990':'#62eda1';if(i===0){ctx.shadowColor='#66ffac';ctx.shadowBlur=13}rounded(px+1.5,py+1.5,17,17,5);ctx.shadowBlur=0});const h=snake[0];if(h){const oldHead=previousSnake?.[0]||h;const hx=(oldHead.x+(h.x-oldHead.x)*alpha)*SIZE,hy=(oldHead.y+(h.y-oldHead.y)*alpha)*SIZE;ctx.fillStyle='#0b2a24';let eyes;if(direction.x!==0)eyes=[{x:hx+(direction.x>0?14:6),y:hy+6},{x:hx+(direction.x>0?14:6),y:hy+14}];else eyes=[{x:hx+6,y:hy+(direction.y>0?14:6)},{x:hx+14,y:hy+(direction.y>0?14:6)}];eyes.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,1.8,0,Math.PI*2);ctx.fill()})}}
+const keymap={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',w:'up',s:'down',a:'left',d:'right'};
+document.addEventListener('keydown',e=>{const key=e.key.length===1?e.key.toLowerCase():e.key;if(keymap[key]){e.preventDefault();setDirection(keymap[key])}else if(e.code==='Space'){e.preventDefault();pauseToggle()}else if(e.key==='Enter'&&(state==='ready'||state==='over'||state==='won'))start()});
+document.querySelectorAll('[data-dir]').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();setDirection(b.dataset.dir)}));let touchStart=null;canvas.addEventListener('touchstart',e=>{touchStart={x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY}},{passive:true});canvas.addEventListener('touchend',e=>{if(!touchStart)return;const dx=e.changedTouches[0].clientX-touchStart.x,dy=e.changedTouches[0].clientY-touchStart.y;touchStart=null;if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;setDirection(Math.abs(dx)>Math.abs(dy)?dx>0?'right':'left':dy>0?'down':'up')},{passive:true});
+startBtn.addEventListener('click',start);restartBtn.addEventListener('click',start);pauseBtn.addEventListener('click',pauseToggle);overlayButton.addEventListener('click',()=>state==='paused'?pauseToggle():start());document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='playing')pauseToggle()});resetData();syncButtons();
+})();
+</script>
+</body>
+</html>
